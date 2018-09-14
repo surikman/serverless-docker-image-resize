@@ -1,5 +1,11 @@
 const stream = require('stream')
-const AWS = require('aws-sdk')
+// const AWS = require('aws-sdk')
+
+// X-Ray SDK does not work with the node8 async pattern (only works with callbacks)
+const awsXRay = require('aws-xray-sdk')
+const AWS = awsXRay.captureAWS(require('aws-sdk'))
+AWS.config.update({region: process.env.REGION})
+
 const S3 = new AWS.S3({
   signatureVersion: 'v4'
 })
@@ -21,7 +27,7 @@ const writeStreamToS3 = ({ Bucket, Key }) => {
   }
 }
 
-exports.handler = async (event) => {
+const handler = async (event) => {
   const key = event.queryStringParameters.key
   const match = key.match(/(\d+)x(\d+)\/(.*)/)
   const width = parseInt(match[1], 10)
@@ -30,7 +36,8 @@ exports.handler = async (event) => {
   const newKey = '' + width + 'x' + height + '/' + originalKey
 
   try {
-    const imageLocation = `${URL}/${newKey}`
+    // location of the resized image
+    const resizedImageLocation = `${URL}/${newKey}`
 
     // sharp resize stream
     const resize = sharp()
@@ -48,26 +55,28 @@ exports.handler = async (event) => {
 
     // wait for the stream to finish
     const uploadedData = await uploadFinished
-    console.log('Data: ', {
+    console.log({
       ...uploadedData,
       BucketEndpoint: URL,
-      ImageURL: imageLocation
+      ImageURL: resizedImageLocation
     }) // log data to Dashbird
 
-    const response = {
-      statusCode: '301',
-      headers: { 'location': imageLocation },
+    // return a 301 redirect to the newly created resource in S3
+    return {
+      statusCode: 301,
+      headers: { 'location': resizedImageLocation },
       body: ''
     }
-    console.log('Response: ', response)
-
-    // return a 301 redirect to the newly created resource in S3
-    return response
   } catch (err) {
     console.error(err)
     return {
-      statusCode: '500',
-      body: err.message
+      statusCode: 500,
+      body: err
     }
   }
+}
+
+exports.handler = (event, context, callback) => {
+  handler(event)
+    .then(res => callback(null, res))
 }

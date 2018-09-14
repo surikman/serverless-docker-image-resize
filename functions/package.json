@@ -5,6 +5,7 @@
   "readme": "Serverless image resizing",
   "main": "resize.js",
   "dependencies": {
+    "aws-xray-sdk": "^2.0.0",
     "serverless-plugin-tracing": "^2.0.0",
     "sharp": "^0.18.4"
   },
