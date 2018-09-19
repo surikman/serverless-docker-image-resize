@@ -8,6 +8,7 @@ provider:
   runtime: nodejs8.10
   stage: ${env:STAGE, 'dev'}
   profile: serverless-admin
+  memorySize: 1536
   tracing: true
   region: ${env:REGION, 'us-east-1'}
   environment:

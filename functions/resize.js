@@ -27,6 +27,20 @@ const writeStreamToS3 = ({ Bucket, Key }) => {
   }
 }
 
+// traces
+const startStreamTrace = ({ val, newKey }) => {
+  awsXRay.captureFunc('resizeStarted', function (subsegment) {
+    subsegment.addAnnotation('New Key', newKey)
+    subsegment.addAnnotation('Value', val)
+  })
+}
+const endStreamTrace = ({ val, newKey }) => {
+  awsXRay.captureFunc('resizeEnded', function (subsegment) {
+    subsegment.addAnnotation('New Key', newKey)
+    subsegment.addAnnotation('Value', val)
+  })
+}
+
 const handler = async (event) => {
   const key = event.queryStringParameters.key
   const match = key.match(/(\d+)x(\d+)\/(.*)/)
@@ -39,13 +53,18 @@ const handler = async (event) => {
     // location of the resized image
     const resizedImageLocation = `${URL}/${newKey}`
 
-    // sharp resize stream
+    // create the read stream from S3
+    const readStream = S3.getObject({ Bucket: BUCKET, Key: originalKey }).createReadStream()
+    readStream.on('end', () => startStreamTrace(newKey))
+
+    // create sharp resize stream
     const resize = sharp()
       .resize(width, height)
       .toFormat('png')
+      .on('pipe', (val) => startStreamTrace({ val, key }))
+      .on('end', (val) => endStreamTrace({ val, key }))
 
-    // create the read and write streams from and to S3
-    const readStream = S3.getObject({ Bucket: BUCKET, Key: originalKey }).createReadStream()
+    // create the write stream to S3
     const { writeStream, uploadFinished } = writeStreamToS3({ Bucket: BUCKET, Key: newKey })
 
     // trigger the stream
@@ -69,14 +88,15 @@ const handler = async (event) => {
     }
   } catch (err) {
     console.error(err)
-    return {
-      statusCode: 500,
-      body: err
-    }
+    return Promise.reject(err)
   }
 }
 
 exports.handler = (event, context, callback) => {
   handler(event)
     .then(res => callback(null, res))
+    .catch(err => callback(err, {
+      statusCode: 500,
+      body: err.message
+    }))
 }
