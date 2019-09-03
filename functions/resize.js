@@ -26,16 +26,20 @@ const writeStreamToS3 = ({ Bucket, Key }) => {
 }
 // sharp resize stream
 const streamToSharp = ({ width, height }) => {
+  width = width === 'AUTO' ? null : width;
+  height = height === 'AUTO' ? null : height;
   return sharp()
     .resize(width, height)
-    .toFormat('png')
+    .jpeg()
 }
 
 exports.handler = async (event) => {
+  //https://github.com/sagidM/s3-resizer/blob/master/index.js
   const key = event.queryStringParameters.key
-  const match = key.match(/(\d+)x(\d+)\/(.*)/)
-  const width = parseInt(match[1], 10)
-  const height = parseInt(match[2], 10)
+  const match = key.match(/(\d+|AUTO)x(\d+|AUTO)\/(.*)/)
+  const width = match[1] === 'AUTO' ? match[1] : parseInt(match[1], 10);
+  const height = match[2] === 'AUTO' ? match[2] : parseInt(match[2], 10);
+  console.log("Width: "+width, "Height:"+height);
   const originalKey = match[3]
   const newKey = '' + width + 'x' + height + '/' + originalKey
   const imageLocation = `${URL}/${newKey}`
